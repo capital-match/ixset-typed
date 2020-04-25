@@ -571,10 +571,12 @@ fromMapOfSets partialindex =
 -- 'updateIx' instead.
 insert :: Indexable ixs a => a -> IxSet ixs a -> IxSet ixs a
 insert = change Set.insert Ix.insert
+{-# INLINABLE insert #-}
 
 -- | Removes an item from the 'IxSet'.
 delete :: Indexable ixs a => a -> IxSet ixs a -> IxSet ixs a
 delete = change Set.delete Ix.delete
+{-# INLINABLE delete #-}
 
 -- | Internal implementation for update* family
 updateIx' :: (Indexable ixs a, IsIndexOf ix ixs, MonadThrow m)
@@ -584,6 +586,7 @@ updateIx' get i new ixset = do
   pure $ insert new $
     maybe ixset (flip delete ixset) $
     existing
+{-# INLINE updateIx' #-}
 
 -- | Internal implementation for delete* family
 deleteIx' :: (Indexable ixs a, IsIndexOf ix ixs, MonadThrow m)
@@ -592,6 +595,7 @@ deleteIx' get i ixset = do
   existing <- get $ ixset @= i
   pure $ maybe ixset (flip delete ixset) $
     existing
+{-# INLINE deleteIx' #-}
 
 -- | Will replace the item with the given index of type 'ix'.
 -- Only works if there is at most one item with that index in the 'IxSet'.
@@ -599,6 +603,7 @@ deleteIx' get i ixset = do
 updateIx :: (Indexable ixs a, IsIndexOf ix ixs)
          => ix -> a -> IxSet ixs a -> IxSet ixs a
 updateIx i new ixset = fromRight ixset $ updateIx' (Right . getOne) i new ixset
+{-# INLINABLE updateIx #-}
 
 
 -- | Will replace the item with the given index of type 'ix'.
@@ -612,6 +617,7 @@ alterIx i f ixset =
   in ((maybe id insert new) $
     maybe ixset (flip delete ixset) $
     existing,(existing,new))
+{-# INLINABLE alterIx #-}
 
 -- | Will replace the item with the given index of type 'ix'.
 -- Only works if there is at most one item with that index in the 'IxSet'.
@@ -629,6 +635,7 @@ updateUnique = updateIx' getUnique
 deleteIx :: (Indexable ixs a, IsIndexOf ix ixs)
          => ix -> IxSet ixs a -> IxSet ixs a
 deleteIx i ixset = fromRight ixset $ deleteIx' (Right . getOne) i ixset
+{-# INLINABLE deleteIx #-}
 
 -- | Will delete the item with the given index of type 'ix'.
 -- Only works if there is at  most one item with that index in the 'IxSet'.
@@ -939,6 +946,7 @@ getEQ v (IxSet _ ixs) =  f (access ixs)
   where
     f :: Ix ix a -> IxSet ixs a
     f (Ix index) = maybe empty (fromMapOfSet v) $ Map.lookup v index
+{-# INLINABLE  getEQ #-}
 
 lookup :: forall ixs ix a. IsIndexOf ix ixs
         => ix -> IxSet ixs a -> Maybe a
@@ -948,6 +956,7 @@ lookup v (IxSet _ ixs) =  f (access ixs)
     f (Ix index) = case Set.toList <$> (Map.lookup v index) of
                         Just [x] -> Just x
                         _ -> Nothing
+{-# INLINABLE  lookup#-}
 
 -- | A function for building up selectors on 'IxSet's.  Used in the
 -- various get* functions.  The set must be indexed over key type,
