@@ -319,6 +319,7 @@ lengthIxList = go 0
     go :: forall ixs'. Int -> IxList ixs' a -> Int
     go !acc Nil        = acc
     go !acc (_ ::: xs) = go (acc + 1) xs
+{-# INLINE lengthIxList #-}
 
 -- | Turn an index list into a normal list, given a function that
 -- turns an arbitrary index into an element of a fixed type @r@.
@@ -336,6 +337,7 @@ mapIxList :: (All Ord ixs, All (Indexed a) ixs)
           -> IxList ixs a -> IxList ixs a
 mapIxList _ Nil        = Nil
 mapIxList f (x ::: xs) = f x ::: mapIxList f xs
+{-# INLINE mapIxList #-}
 
 -- | Map over an index list (spine-strict).
 mapIxListPar' :: (All Ord ixs, All (Indexed a) ixs)
@@ -347,6 +349,7 @@ mapIxListPar'  (x ::: xs) = do
   x' <- rparWith rseq x
   xs' <- mapIxListPar' xs
   return (x' ::: xs')
+{-# INLINE mapIxListPar' #-}
 
 -- | Map over an index list (spine-strict).
 mapIxList' :: (All Ord ixs, All (Indexed a) ixs)
@@ -355,6 +358,7 @@ mapIxList' :: (All Ord ixs, All (Indexed a) ixs)
            -> IxList ixs a -> IxList ixs a
 mapIxList' _ Nil        = Nil
 mapIxList' f (x ::: xs) = f x !::: mapIxList' f xs
+{-# INLINE mapIxList' #-}
 
 
 -- | Zip two index lists of compatible type (spine-strict).
@@ -364,6 +368,7 @@ zipWithIxList' :: (All Ord ixs, All (Indexed a) ixs)
                -> IxList ixs a -> IxList ixs a -> IxList ixs a
 zipWithIxList' _ Nil        Nil        = Nil
 zipWithIxList' f (x ::: xs) (y ::: ys) = f x y !::: zipWithIxList' f xs ys
+{-# INLINE zipWithIxList' #-}
 
 --------------------------------------------------------------------------
 -- Various instances for 'IxSet'
