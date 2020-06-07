@@ -682,7 +682,7 @@ fromSet set = IxSet set v
     v = mapIxList mkIx mkEmptyIxList
 
     mkIx :: forall ix. (Indexed a ix, Ord ix) => Ix ix a -> Ix ix a
-    mkIx (Ix _) = Ix (Ix.fromList [(k, x) | x <- Set.toList set, k <- ixFun x])
+    mkIx (Ix _) = Ix (List.foldl' (\m v -> List.foldl' (\m' k-> Ix.insert k v m') m (ixFun v)) Map.empty (Set.toList set))
 
 -- | Converts a list to an 'IxSet'.
 fromList :: (Indexable ixs a) => [a] -> IxSet ixs a
