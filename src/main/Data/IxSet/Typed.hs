@@ -532,6 +532,7 @@ fromMapOfSet v a =
       where
         ix :: Map ix' (Set a)
         ix = List.foldl' (\m v -> List.foldl' (\m' k-> Ix.insert k v m') m (ixFun v)) Map.empty (Set.toList a) 
+{-# INLINE fromMapOfSet #-}
 
 
 fromMapOfSets :: forall ixs ix a. (Indexable ixs a, IsIndexOf ix ixs)
@@ -564,6 +565,7 @@ fromMapOfSets partialindex =
 
         ix :: Map ix' (Set a)
         ix = Ix.fromList dss
+{-# INLINE fromMapOfSets #-}
 
 -- | Inserts an item into the 'IxSet'. If your data happens to have a primary
 -- key this function is most likely /not/ what you want. In this case, use
