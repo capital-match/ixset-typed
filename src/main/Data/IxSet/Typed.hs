@@ -494,11 +494,8 @@ insertList xs (IxSet a indexes) = IxSet (List.foldl' (\ b x -> Set.insert x b) a
     update :: forall ix. (Indexed a ix, Ord ix) => Ix ix a -> Ix ix a
     update (Ix index) = Ix index'
       where
-        dss :: [(ix, a)]
-        dss = [(k, x) | x <- xs, k <- ixFun x]
-
         index' :: Map ix (Set a)
-        index' = Ix.insertList dss index
+        index' = List.foldl' (\m v -> List.foldl' (\m' k-> Ix.insert k v m') m (ixFun v)) index xs
 
 -- | Internal helper function that takes a partial index from one index
 -- set and rebuilds the rest of the structure of the index set.
@@ -533,11 +530,8 @@ fromMapOfSet v a =
     updatet :: forall ix'. (Indexed a ix', Ord ix') => Ix ix' a -> Ix ix' a
     updatet (Ix _) = Ix ix
       where
-        dss :: [(ix', a)]
-        dss = [(k, x) | x <- Set.toList a, k <- ixFun x]
-
         ix :: Map ix' (Set a)
-        ix = Ix.fromList dss
+        ix = List.foldl' (\m v -> List.foldl' (\m' k-> Ix.insert k v m') m (ixFun v)) Map.empty (Set.toList a) 
 
 
 fromMapOfSets :: forall ixs ix a. (Indexable ixs a, IsIndexOf ix ixs)
@@ -683,10 +677,12 @@ fromSet set = IxSet set v
 
     mkIx :: forall ix. (Indexed a ix, Ord ix) => Ix ix a -> Ix ix a
     mkIx (Ix _) = Ix (List.foldl' (\m v -> List.foldl' (\m' k-> Ix.insert k v m') m (ixFun v)) Map.empty (Set.toList set))
+{-# INLINABLE fromSet #-}
 
 -- | Converts a list to an 'IxSet'.
 fromList :: (Indexable ixs a) => [a] -> IxSet ixs a
 fromList list = insertList list empty
+{-# INLINABLE fromList #-}
 
 -- | Returns the number of unique items in the 'IxSet'.
 size :: IxSet ixs a -> Int
