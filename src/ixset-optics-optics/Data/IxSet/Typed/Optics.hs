@@ -1,5 +1,6 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Data.IxSet.Typed.Optics(
   atPrimaryKey,
@@ -15,7 +16,7 @@ import Data.IxSet.Typed as IS
 import Data.Set (Set)
 import Optics
 
-type GetIdx ixs ix a = (Indexable ixs a, IsIndexOf ix ixs)
+type GetIdx ixs ix a = (Indexed a ix, Indexable ixs a, IsIndexOf a ix ixs, Eq (IndexType a ix))
 
 -- | Assuming the given GetIdx is a /primary key/, constructs a lens to access
 -- the value associated with the primary key. The getting operation uses 'getEQ'

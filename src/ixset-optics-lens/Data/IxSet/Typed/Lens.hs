@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Data.IxSet.Typed.Lens(
   atPrimaryKey,
@@ -15,7 +16,7 @@ import Control.Lens
 import Data.IxSet.Typed as IS
 import Data.Set (Set)
 
-type GetIdx ixs ix a = (IS.Indexable ixs a, IS.IsIndexOf ix ixs)
+type GetIdx ixs ix a = (IS.Indexed a ix,IS.Indexable ixs a, IS.IsIndexOf a ix ixs, Eq (IndexType a ix))
 
 -- | Assuming the given GetIdx is a /primary key/, constructs a lens to access
 -- the value associated with the primary key. The getting operation uses 'getEQ'
