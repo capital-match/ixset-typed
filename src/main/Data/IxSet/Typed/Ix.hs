@@ -11,6 +11,7 @@ module Data.IxSet.Typed.Ix
     ( Ix(..)
     , Indexed(..)
     , insert
+    , lookup
     , delete
     , fromList
     , fromSet
@@ -33,7 +34,7 @@ import Data.Map  (Map)
 import Data.HashMap.Lazy  (HashMap)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Prelude hiding (filter)
+import Prelude hiding (filter, lookup)
 
 -- the core data types
 class Coercible ix (IndexType a ix) =>  Indexed a ix where
@@ -51,9 +52,16 @@ class Coercible ix (IndexType a ix) =>  Indexed a ix where
 -- values (of type 'a') for that key.
 newtype Ix ix a = Ix (Container (IndexType a ix) (Set a))
 
-
-
 -- modification operations
+
+lookup :: IxContainerMinimal k
+       => k -> Container k (Set a) -> Maybe (Set a)
+lookup k v = Container.lookup k v
+{-# INLINE lookup #-}
+{-# SPECIALIZE lookup :: Int -> IntMap (Set a) -> Maybe (Set a) #-}
+{-# SPECIALIZE lookup :: (Ord k) => Polymorphic k -> Map (Polymorphic k) (Set a) -> Maybe (Set a)  #-}
+{-# SPECIALIZE lookup :: (Eq k, Hashable k) => HashPolymorphic k -> HashMap (HashPolymorphic k) (Set a) -> Maybe (Set a)  #-}
+
 
 -- | Convenience function for inserting into 'Container's of 'Set's as in
 -- the case of an 'Ix'.  If the key did not already exist in the
@@ -95,11 +103,12 @@ fromSet f xs = fromList (concatMap (\i ->(,i) <$> f i ) (Set.toList xs ))
 
 -- | Convenience function for deleting from 'Container's of 'Set's. If the
 -- resulting 'Set' is empty, then the entry is removed from the 'Container'.
-delete :: (IxContainer k ,Ord a)
+delete :: (IxContainerMinimal k ,Ord a)
        => k -> a -> Container k (Set a) -> Container k (Set a)
-delete k v index = Container.update remove k index
+delete k v index = Container.alter remove k index
     where
-    remove set = let set' = Set.delete v set
+    remove Nothing  = Nothing
+    remove (Just set) = let set' = Set.delete v set
                  in if Set.null set' then Nothing else Just set'
 {-# INLINE delete #-}
 {-# SPECIALIZE delete :: Ord a =>  Int -> a -> IntMap (Set a) -> IntMap (Set a) #-}
@@ -107,7 +116,7 @@ delete k v index = Container.update remove k index
 {-# SPECIALIZE delete :: (Ord a, Eq k, Hashable k) => HashPolymorphic k -> a -> HashMap (HashPolymorphic k) (Set a) -> HashMap (HashPolymorphic k) (Set a)  #-}
 
 -- | Helper function to 'delete' a list of elements from a set.
-deleteList :: (IxContainer k , Ord a)
+deleteList :: (IxContainerMinimal k , Ord a)
            => [(k,a)] -> Container k (Set a) -> Container k (Set a)
 deleteList xs index = List.foldl' (\m (k,v) -> delete k v m) index xs
 {-# INLINE deleteList #-}

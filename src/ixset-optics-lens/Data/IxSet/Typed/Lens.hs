@@ -16,7 +16,7 @@ import Control.Lens
 import Data.IxSet.Typed as IS
 import Data.Set (Set)
 
-type GetIdx ixs ix a = (IS.Indexed a ix,IS.Indexable ixs a, IS.IsIndexOf a ix ixs, Eq (IndexType a ix))
+type GetIdx ixs ix a = (IS.Indexed a ix,IS.Indexable ixs a,AllIxType a IxContainerMinimal ixs, IxContainer (IndexType a ix), IS.IsIndexOf a ix ixs, Eq (IndexType a ix))
 
 -- | Assuming the given GetIdx is a /primary key/, constructs a lens to access
 -- the value associated with the primary key. The getting operation uses 'getEQ'
@@ -41,7 +41,7 @@ ixPrimaryKey :: GetIdx ixs ix a => ix -> Traversal' (IxSet ixs a) a
 ixPrimaryKey i = atPrimaryKey i . _Just
 {-# INLINE ixPrimaryKey #-}
 
-traverseWith :: IS.Indexable ixs a => (IxSet ixs a -> IxSet ixs a) -> Traversal' (IxSet ixs a) a
+traverseWith :: (AllIxType a IxContainerMinimal ixs,IS.Indexable ixs a) => (IxSet ixs a -> IxSet ixs a) -> Traversal' (IxSet ixs a) a
 traverseWith ixsFilter f ixs = let sa = ixsFilter ixs in foldr (liftA2 IS.insert . f) (pure $ IS.difference ixs sa) sa
 {-# INLINE traverseWith #-}
 

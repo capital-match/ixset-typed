@@ -130,6 +130,8 @@ module Data.IxSet.Typed
      deleteIx,
      Container.Polymorphic(..),
      IxContainer,
+     IxContainerMinimal,
+     AllIxType,
      deleteUnique,
      alterIx,
      filter,
@@ -204,7 +206,7 @@ import Control.Monad.Catch
 import Data.Either
 import qualified Data.Foldable as Fold
 import Data.IxSet.Typed.Ix (Indexed(..),IndexType,Ix (Ix))
-import Data.IxSet.Typed.Container (OrderedContainer, IxContainer, Container)
+import Data.IxSet.Typed.Container (OrderedContainer, IxContainer, IxContainerMinimal, Container)
 import qualified Data.IxSet.Typed.Container as Container
 import qualified Data.IxSet.Typed.Ix as Ix
 import qualified Data.List as List
@@ -285,10 +287,11 @@ type instance AllIxType a c (x ': xs) = (c (IndexType a x), AllIxType a c xs)
 -- * An 'Ord' instance for each @ix@ in @ixs@
 -- * An 'Indexed' instance for @a@ and each @ix@ in @ixs@
 type Indexable ixs a = (AllIxType a IxContainer ixs , AllIxType a Ord ixs, All (Indexed a) ixs, Ord a, MkEmptyIxList a ixs)
+type IndexableMinimal ixs a = (AllIxType a IxContainerMinimal ixs , AllIxType a Ord ixs, All (Indexed a) ixs, Ord a, MkEmptyIxList a ixs)
 
 
 -- | Operations related to the type-level list of index types.
-class (IxContainer (IndexType a ix)) => IsIndexOf a (ix :: *) (ixs :: [*]) where
+class  IsIndexOf a (ix :: *) (ixs :: [*]) where
 
   -- | Provide access to the selected index in the list.
   access :: IxList ixs a -> Ix ix a
@@ -307,7 +310,7 @@ class (IxContainer (IndexType a ix)) => IsIndexOf a (ix :: *) (ixs :: [*]) where
 
 instance
   {-# OVERLAPPING #-}
-  (IxContainer (IndexType a ix)) => IsIndexOf a ix (ix ': ixs) where
+  IsIndexOf a ix (ix ': ixs) where
   access (x ::: _xs)     = x
   mapAt fh ft (x ::: xs) = fh x ::: mapIxList ft xs
 
@@ -367,6 +370,15 @@ mapIxList' _ Nil        = Nil
 mapIxList' f (x ::: xs) = f x !::: mapIxList' f xs
 {-# INLINE mapIxList' #-}
 
+mapIxListMinimal' :: (AllIxType a IxContainerMinimal ixs, AllIxType a Ord ixs, All (Indexed a) ixs)
+           => (forall ix. (IxContainerMinimal (IndexType a ix), Indexed a ix) => Ix ix a -> Ix ix a)
+                 -- ^ what to do with each index
+           -> IxList ixs a -> IxList ixs a
+mapIxListMinimal' _ Nil        = Nil
+mapIxListMinimal' f (x ::: xs) = f x !::: mapIxListMinimal' f xs
+{-# INLINE mapIxListMinimal' #-}
+
+
 
 -- | Zip two index lists of compatible type (spine-strict).
 zipWithIxList' :: (AllIxType a IxContainer ixs, AllIxType a Ord ixs, All (Indexed a) ixs)
@@ -381,13 +393,13 @@ zipWithIxList' f (x ::: xs) (y ::: ys) = f x y !::: zipWithIxList' f xs ys
 -- Various instances for 'IxSet'
 --------------------------------------------------------------------------
 
-instance Indexable ixs a => Eq (IxSet ixs a) where
+instance  Eq a => Eq (IxSet ixs a) where
   IxSet a _ == IxSet b _ = a == b
 
-instance Indexable ixs a => Ord (IxSet ixs a) where
+instance Ord a => Ord (IxSet ixs a) where
   compare (IxSet a _) (IxSet b _) = compare a b
 
-instance (Indexable ixs a, Show a) => Show (IxSet ixs a) where
+instance  Show a => Show (IxSet ixs a) where
   showsPrec prec = showsPrec prec . toSet
 
 instance (Indexable ixs a, Read a) => Read (IxSet ixs a) where
@@ -440,7 +452,7 @@ instance Exception NotUniqueException
 --------------------------------------------------------------------------
 
 -- | An empty 'IxSet'.
-empty :: Indexable ixs a => IxSet ixs a
+empty :: MkEmptyIxList a ixs => IxSet ixs a
 empty = IxSet Set.empty mkEmptyIxList
 
 -- | Create an empty 'IxList' which is part of an empty 'IxSet'. This class is
@@ -451,7 +463,7 @@ class MkEmptyIxList a (ixs :: [*]) where
   mkEmptyIxList :: IxList ixs a
 instance MkEmptyIxList a '[] where
   mkEmptyIxList = Nil
-instance (IxContainer (IndexType a ix) , MkEmptyIxList a ixs) => MkEmptyIxList a (ix ': ixs) where
+instance (IxContainerMinimal (IndexType a ix) , MkEmptyIxList a ixs) => MkEmptyIxList a (ix ': ixs) where
   mkEmptyIxList = (Ix Container.empty) ::: mkEmptyIxList
 
 -- | An 'Indexed' class asserts that it is possible to extract indices of type
@@ -465,22 +477,22 @@ type SetOp =
     forall a. Ord a => a -> Set a -> Set a
 
 type IndexOp =
-    forall k a. (IxContainer k,Ord a) => k -> a -> Container k (Set a) -> Container k (Set a)
+    forall k a. (IxContainerMinimal k,Ord a) => k -> a -> Container k (Set a) -> Container k (Set a)
 
 -- | Higher order operator for modifying 'IxSet's.  Use this when your
 -- final function should have the form @a -> 'IxSet' a -> 'IxSet' a@,
 -- e.g. 'insert' or 'delete'.
-change :: forall ixs a. Indexable ixs a
+change :: forall ixs a. IndexableMinimal ixs a
        => SetOp -> IndexOp -> a -> IxSet ixs a -> IxSet ixs a
 change !opS !opI x (IxSet a indexes) = IxSet (opS x a) v
   where
     v :: IxList ixs a
-    v = mapIxList' update indexes
+    v = mapIxListMinimal' update indexes
 
-    update :: forall ix. (IxContainer (IndexType a ix), Indexed a ix) => Ix ix a -> Ix ix a
+    update :: forall ix. (IxContainerMinimal (IndexType a ix), Indexed a ix) => Ix ix a -> Ix ix a
     update (Ix index) = Ix index'
       where
-        ii :: forall k . (IxContainer k) => Container k (Set a) -> k -> Container k (Set a)
+        ii :: forall k . (IxContainerMinimal k) => Container k (Set a) -> k -> Container k (Set a)
         ii m dkey = opI dkey x m
         index' :: Container (IndexType a ix) (Set a)
         index' = List.foldl' ii index (ixFunRep @a @ix x) 
@@ -508,7 +520,7 @@ insertList xs (IxSet a indexes) = IxSet (List.foldl' (\ b x -> Set.insert x b) a
 -- could reuse originalindex as it is. But there can be more, so we need to
 -- add remaining ones (in updateh). Anyway we try to reuse old structure and
 -- keep new allocations low as much as possible.
-fromContainerOfSet :: forall ixs ix a. (Eq (IndexType a ix), Indexable ixs a, IsIndexOf a ix ixs)
+fromContainerOfSet :: forall ixs ix a. (Eq (IndexType a ix), IxContainer (IndexType a ix), Indexable ixs a, IsIndexOf a ix ixs)
               => ix -> Set a -> IxSet ixs a
 fromContainerOfSet v a =
     IxSet a (mapAt @a @ix @ixs updateh updatet mkEmptyIxList)
@@ -532,12 +544,12 @@ fromContainerOfSet v a =
 
 
         ix :: Container (IndexType a ix) (Set a)
-        ix = Ix.insertList dss (Container.singleton (ixRep @a @ix v) a)
+        ix = Ix.insertList dss (Container.insert (ixRep @a @ix v) a Container.empty)
 
 
 
     -- Update function for all other indices.
-    updatet :: forall ix'. (IxContainer (IndexType a ix'), Indexed a ix') => Ix ix' a -> Ix ix' a
+    updatet :: forall ix'. (IxContainerMinimal (IndexType a ix'), Indexed a ix') => Ix ix' a -> Ix ix' a
     updatet (Ix _) = Ix ix
       where
         ix :: Container (IndexType a ix') (Set a)
@@ -545,7 +557,7 @@ fromContainerOfSet v a =
 {-# INLINE fromContainerOfSet #-}
 
 
-fromContainerOfSets :: forall ixs ix a. (Indexable ixs a, IsIndexOf a ix ixs)
+fromContainerOfSets :: forall ixs ix a. (IxContainer (IndexType a ix), Indexable ixs a, IsIndexOf a ix ixs)
               => Container (IndexType a ix) (Set a) -> IxSet ixs a
 fromContainerOfSets partialindex =
     IxSet a (mapAt @a @ix @ixs updateh updatet mkEmptyIxList)
@@ -580,30 +592,30 @@ fromContainerOfSets partialindex =
 -- | Inserts an item into the 'IxSet'. If your data happens to have a primary
 -- key this function is most likely /not/ what you want. In this case, use
 -- 'updateIx' instead.
-insert :: Indexable ixs a => a -> IxSet ixs a -> IxSet ixs a
+insert :: IndexableMinimal ixs a => a -> IxSet ixs a -> IxSet ixs a
 insert = change Set.insert Ix.insert
 {-# INLINE insert #-}
 
 -- | Removes an item from the 'IxSet'.
-delete :: Indexable ixs a => a -> IxSet ixs a -> IxSet ixs a
+delete :: IndexableMinimal ixs a => a -> IxSet ixs a -> IxSet ixs a
 delete = change Set.delete Ix.delete
 {-# INLINE delete #-}
 
 -- | Internal implementation for update* family
-updateIx' :: (Eq (IndexType a ix), Indexed a ix ,Indexable ixs a, IsIndexOf a ix ixs, MonadThrow m)
-         => (IxSet ixs a -> m (Maybe a)) -> ix -> a -> IxSet ixs a -> m (IxSet ixs a)
+updateIx' :: forall a ix ixs m. (Indexed a ix ,IxContainerMinimal (IndexType a ix) , IndexableMinimal ixs a, IsIndexOf a ix ixs, MonadThrow m)
+         => (Maybe (Set a) -> m (Maybe a)) -> ix -> a -> IxSet ixs a -> m (IxSet ixs a)
 updateIx' get i new ixset = do
-  existing <- get $ ixset @= i
+  existing <- get (lookupSet i ixset)
   pure $ insert new $
     maybe ixset (flip delete ixset) $
     existing
 {-# INLINE updateIx' #-}
 
 -- | Internal implementation for delete* family
-deleteIx' :: (Eq (IndexType a ix), Indexed a ix ,Indexable ixs a, IsIndexOf a ix ixs, MonadThrow m)
-         => (IxSet ixs a -> m (Maybe a)) -> ix -> IxSet ixs a -> m (IxSet ixs a)
+deleteIx' :: (Indexed a ix ,IndexableMinimal ixs a,IxContainerMinimal (IndexType a ix) , IsIndexOf a ix ixs, MonadThrow m)
+         => (Maybe (Set a) -> m (Maybe a)) -> ix -> IxSet ixs a -> m (IxSet ixs a)
 deleteIx' get i ixset = do
-  existing <- get $ ixset @= i
+  existing <- get $ lookupSet i ixset 
   pure $ maybe ixset (flip delete ixset) $
     existing
 {-# INLINE deleteIx' #-}
@@ -611,22 +623,22 @@ deleteIx' get i ixset = do
 -- | Will replace the item with the given index of type 'ix'.
 -- Only works if there is at most one item with that index in the 'IxSet'.
 -- Will not change 'IxSet' if you have more than one item with given index.
-updateIx :: (Eq (IndexType a ix),Indexed a ix ,Indexable ixs a, IsIndexOf a ix ixs)
+updateIx :: (Indexed a ix ,IndexableMinimal ixs a,IxContainerMinimal (IndexType a ix) , IsIndexOf a ix ixs)
          => ix -> a -> IxSet ixs a -> IxSet ixs a
-updateIx i new ixset = fromRight ixset $ updateIx' (Right . getOne) i new ixset
+updateIx i new ixset = fromRight ixset $ updateIx' (Right . getOneSet) i new ixset
 {-# INLINE updateIx #-}
 
 
 -- | Will replace the item with the given index of type 'ix'.
 -- Only works if there is at most one item with that index in the 'IxSet'.
 -- Will not change 'IxSet' if you have more than one item with given index.
-alterIx :: (Indexed a ix ,Indexable ixs a, IsIndexOf a ix ixs)
+alterIx :: (Indexed a ix ,IndexableMinimal ixs a,IxContainerMinimal (IndexType a ix) , IsIndexOf a ix ixs)
          => ix -> (Maybe a -> Maybe a)  -> IxSet ixs a -> (IxSet ixs a, (Maybe a, Maybe a))
 alterIx i f ixset =
   let existing = lookup i ixset
       new = f existing
-  in ((maybe id insert new) $
-    maybe ixset (flip delete ixset) $
+  in ((maybe id (\ix' set -> (flip insert) set ix') new) $
+    maybe ixset ((flip delete) ixset ) $
     existing,(existing,new))
 {-# INLINE alterIx #-}
 
@@ -636,16 +648,16 @@ alterIx i f ixset =
 
 -- Throws: 'NotUniqueException
 
-updateUnique :: (Eq (IndexType a ix),Indexed a ix ,Indexable ixs a, IsIndexOf a ix ixs, MonadThrow m)
+updateUnique :: (Indexed a ix ,IndexableMinimal ixs a,IxContainerMinimal (IndexType a ix) , IsIndexOf a ix ixs, MonadThrow m)
          => ix -> a -> IxSet ixs a -> m (IxSet ixs a)
-updateUnique = updateIx' getUnique
+updateUnique = updateIx' getUniqueSet
 
 -- | Will delete the item with the given index of type 'ix'.
 -- Only works if there is at  most one item with that index in the 'IxSet'.
 -- Will not change 'IxSet' if you have more than one item with given index.
-deleteIx :: (Eq (IndexType a ix),Indexed a ix ,Indexable ixs a, IsIndexOf a ix ixs)
+deleteIx :: (Indexed a ix ,IndexableMinimal ixs a,IxContainerMinimal (IndexType a ix) , IsIndexOf a ix ixs)
          => ix -> IxSet ixs a -> IxSet ixs a
-deleteIx i ixset = fromRight ixset $ deleteIx' (Right . getOne) i ixset
+deleteIx i ixset = fromRight ixset $ deleteIx' (Right . getOneSet) i ixset
 {-# INLINE deleteIx #-}
 
 -- | Will delete the item with the given index of type 'ix'.
@@ -654,9 +666,9 @@ deleteIx i ixset = fromRight ixset $ deleteIx' (Right . getOne) i ixset
 
 -- Throws: 'NotUniqueException
 
-deleteUnique :: (Eq (IndexType a ix),Indexed a ix ,Indexable ixs a, IsIndexOf a ix ixs, MonadThrow m)
+deleteUnique :: (Indexed a ix ,IndexableMinimal ixs a,IxContainerMinimal (IndexType a ix) , IsIndexOf a ix ixs, MonadThrow m)
          => ix -> IxSet ixs a -> m (IxSet ixs a)
-deleteUnique = deleteIx' getUnique
+deleteUnique = deleteIx' getUniqueSet
 
 
 -- | /O(n)/. Filter all elements that satisfy the predicate. In general, using
@@ -741,6 +753,12 @@ getOne ixset = case toList ixset of
                    [x] -> Just x
                    _   -> Nothing
 
+getOneSet :: Maybe (Set a) -> Maybe a
+getOneSet ixset = case Set.toList <$> ixset of
+                   Just [x] -> Just x
+                   _   -> Nothing
+
+
 -- | Like 'getOne' with a user-provided default.
 getOneOr :: a -> IxSet ixs a -> a
 getOneOr def = fromMaybe def . getOne
@@ -753,6 +771,13 @@ getUnique ixset = case toList ixset of
                     [x] -> pure $ Just x
                     [] -> pure Nothing
                     _ -> throwM NotUnique
+getUniqueSet :: MonadThrow m => Maybe (Set a) -> m (Maybe a)
+getUniqueSet ixset = case Set.toList <$> ixset of
+                    Just [x] -> pure $ Just x
+                    Just [] -> pure Nothing
+                    Nothing  -> pure Nothing
+                    _ -> throwM NotUnique
+
 
 -- | Return 'True' if the 'IxSet' is empty, 'False' otherwise.
 null :: IxSet ixs a -> Bool
@@ -799,7 +824,7 @@ difference (IxSet a1 x1) (IxSet a2 x2) =
 --------------------------------------------------------------------------
 
 -- | Infix version of 'getEQ'.
-(@=) :: (Eq (IndexType a ix), Indexable ixs a, Indexed a ix , IsIndexOf a ix ixs)
+(@=) :: (IxContainer (IndexType a ix), Eq (IndexType a ix), Indexable ixs a, Indexed a ix , IsIndexOf a ix ixs)
      => IxSet ixs a -> ix -> IxSet ixs a
 ix @= v = getEQ v ix
 
@@ -844,13 +869,13 @@ ix @><= (v1,v2) = getLTE v2 $ getGT v1 ix
 ix @>=<= (v1,v2) = getLTE v2 $ getGTE v1 ix
 
 -- | Creates the subset that has an index in the provided list.
-(@+) :: (Eq (IndexType a ix),Indexed a ix ,Indexable ixs a, IsIndexOf a ix ixs)
+(@+) :: (IxContainer (IndexType a ix),Eq (IndexType a ix),Indexed a ix , Indexable ixs a, IsIndexOf a ix ixs)
      => IxSet ixs a -> [ix] -> IxSet ixs a
 ix @+ [e] = ix @= e
 ix @+ list = List.foldl' union  empty $  map (ix @=) list
 
 -- | Creates the subset that matches all the provided indices.
-(@*) :: (Eq (IndexType a ix),Indexed a ix ,Indexable ixs a, IsIndexOf a ix ixs)
+(@*) :: (IxContainer (IndexType a ix),Eq (IndexType a ix),Indexed a ix ,Indexable ixs a,  IsIndexOf a ix ixs)
      => IxSet ixs a -> [ix] -> IxSet ixs a
 ix @* [e]= ix @=  e
 ix @* list = List.foldl' intersection ix $ map (ix @=) list
@@ -897,7 +922,7 @@ getRange k1 k2 ixset = getGTE k1 (getLT k2 ixset)
 
 -- | Returns lists of elements paired with the indices determined by
 -- type inference.
-groupBy :: forall ix ixs a. (Coercible ix (IndexType a ix) , IsIndexOf a ix ixs ) => IxSet ixs a -> [(ix, [a])]
+groupBy :: forall ix ixs a. (Coercible ix (IndexType a ix) , IxContainer (IndexType a ix), IsIndexOf a ix ixs ) => IxSet ixs a -> [(ix, [a])]
 groupBy (IxSet _ indexes) = f (access indexes)
   where
     f :: Ix ix a -> [(ix, [a])]
@@ -947,7 +972,7 @@ groupFullDescBy (IxSet _ indexes) = f (access indexes)
 -- various get* functions.  The set must be indexed over key type,
 -- doing otherwise results in a compile error.
 
-getEQ :: forall ixs ix a. (Eq (IndexType a ix), Indexed a ix , Indexable ixs a, IsIndexOf a ix ixs)
+getEQ :: forall ixs ix a. (Eq (IndexType a ix), Indexed a ix , IxContainer (IndexType a ix), Indexable ixs a, IsIndexOf a ix ixs)
         => ix -> IxSet ixs a -> IxSet ixs a
 getEQ v (IxSet _ ixs) =  f (access ixs)
   where
@@ -955,7 +980,7 @@ getEQ v (IxSet _ ixs) =  f (access ixs)
     f (Ix index) = maybe empty (fromContainerOfSet v) $ Container.lookup (ixRep @a @ix v) index
 {-# INLINE getEQ #-}
 
-member :: forall ixs ix a. (Indexed a ix , IsIndexOf a ix ixs) 
+member :: forall ixs ix a. (IxContainer (IndexType a ix),Indexed a ix , IsIndexOf a ix ixs) 
         => ix -> IxSet ixs a -> Bool 
 member v (IxSet _ ixs) =  f (access ixs)
   where
@@ -963,8 +988,16 @@ member v (IxSet _ ixs) =  f (access ixs)
     f (Ix index) = Container.member (ixRep @a @ix v) index
 {-# INLINE member #-}
 
+lookupSet :: forall ixs ix a. (IxContainerMinimal (IndexType a ix),Indexed a ix , IsIndexOf a ix ixs) 
+        => ix -> IxSet ixs a -> Maybe (Set a)
+lookupSet v (IxSet _ ixs) =  f (access ixs)
+  where
+    f :: Ix ix a -> Maybe (Set a)
+    f (Ix index) = Ix.lookup (ixRep @a @ix v) index
+{-# INLINE lookupSet #-}
 
-lookup :: forall ixs ix a. (Indexed a ix , IsIndexOf a ix ixs) 
+
+lookup :: forall ixs ix a. (Indexed a ix ,IxContainerMinimal (IndexType a ix) , IsIndexOf a ix ixs) 
         => ix -> IxSet ixs a -> Maybe a
 lookup v (IxSet _ ixs) =  f (access ixs)
   where
@@ -972,7 +1005,7 @@ lookup v (IxSet _ ixs) =  f (access ixs)
     f (Ix index) = case Set.toList <$> (Container.lookup (ixRep @a @ix v) index) of
                         Just [x] -> Just x
                         _ -> Nothing
-{-# INLINE lookup#-}
+{-# INLINE lookup #-}
 
 -- | A function for building up selectors on 'IxSet's.  Used in the
 -- various get* functions.  The set must be indexed over key type,
