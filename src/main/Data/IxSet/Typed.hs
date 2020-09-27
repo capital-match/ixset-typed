@@ -1,6 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -105,8 +107,10 @@ and 'empty' to build up an 'IxSet' collection:
 module Data.IxSet.Typed
     (
      -- * Set type
-     IxSet(),
-     IxList(),
+     IxSet(..),
+     IxList(..),
+     Ix(..),
+     ixListToList,
      Indexable,
      IsIndexOf(),
      All,
@@ -323,12 +327,12 @@ lengthIxList = go 0
 
 -- | Turn an index list into a normal list, given a function that
 -- turns an arbitrary index into an element of a fixed type @r@.
-ixListToList :: All Ord ixs
-             => (forall ix. Ord ix => Ix ix a -> r)
+ixListToList :: forall c r a ixs. All c ixs
+             => (forall ix. c ix => Ix ix a -> r)
                   -- ^ what to do with each index
              -> IxList ixs a -> [r]
 ixListToList _ Nil        = []
-ixListToList f (x ::: xs) = f x : ixListToList f xs
+ixListToList f (x ::: xs) = f x : ixListToList @c f xs
 
 -- | Map over an index list.
 mapIxList :: (All Ord ixs, All (Indexed a) ixs)
@@ -1043,8 +1047,8 @@ stats (IxSet a ixs) = (no_elements,no_indexes,no_keys,no_values)
     where
       no_elements = Set.size a
       no_indexes  = lengthIxList ixs
-      no_keys     = sum (ixListToList (\ (Ix m) -> Map.size m) ixs)
-      no_values   = sum (ixListToList (\ (Ix m) -> sum [Set.size s | s <- Map.elems m]) ixs)
+      no_keys     = sum (ixListToList @Ord (\ (Ix m) -> Map.size m) ixs)
+      no_values   = sum (ixListToList @Ord (\ (Ix m) -> sum [Set.size s | s <- Map.elems m]) ixs)
 
 forceIndexesSeq :: Indexable ixs a => IxSet ixs a -> IxSet ixs a
 forceIndexesSeq (IxSet a ixs)= IxSet a (mapIxList' id ixs)
