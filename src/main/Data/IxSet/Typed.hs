@@ -169,6 +169,7 @@ module Data.IxSet.Typed
      (@*),
      getEQ,
      lookup,
+     member,
      getLT,
      getGT,
      getLTE,
@@ -960,6 +961,14 @@ lookup v (IxSet _ ixs) =  f (access ixs)
                         Just [x] -> Just x
                         _ -> Nothing
 {-# INLINABLE  lookup#-}
+
+member :: forall ixs ix a. (Indexed a ix , IsIndexOf ix ixs)
+        => ix -> IxSet ixs a -> Bool
+member v (IxSet _ ixs) =  f (access ixs)
+  where
+    f :: Ix ix a -> Bool
+    f (Ix index) = Map.member v index
+{-# INLINE member #-}
 
 -- | A function for building up selectors on 'IxSet's.  Used in the
 -- various get* functions.  The set must be indexed over key type,
